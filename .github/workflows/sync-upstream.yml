@@ -55,7 +55,7 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -87,6 +87,6 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
-          gh release create "$TAG" yandex_pogoda.zip \
+          gh release create "$TAG" yandex_pogoda.zip --repo "$GITHUB_REPOSITORY" \
             --title "$TAG" \
             --notes "Автоматически синхронизировано с yandex/pogoda-home-assistant, тесты пройдены."
