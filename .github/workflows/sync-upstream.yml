@@ -25,6 +25,9 @@ jobs:
           git remote add upstream https://github.com/yandex/pogoda-home-assistant.git
           git fetch upstream main
           git merge --no-edit upstream/main
+          date -u +%G-W%V > .github/upstream-sync-heartbeat
+          git add .github/upstream-sync-heartbeat
+          git commit -m "chore: weekly upstream sync heartbeat" || true
           git push origin main
 
       - name: Set up Python
