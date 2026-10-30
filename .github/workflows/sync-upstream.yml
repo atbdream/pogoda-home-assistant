@@ -78,7 +78,7 @@ jobs:
           manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
           PY
           cd custom_components/yandex_pogoda
-          zip -r ../../../yandex_pogoda.zip .
+          zip -r ../../yandex_pogoda.zip .
 
       - name: Publish tested release
         if: steps.existing.outputs.exists == 'false'
