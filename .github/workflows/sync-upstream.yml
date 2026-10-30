@@ -1,0 +1,92 @@
+name: Sync upstream and publish safe release
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 4"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-test-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge official main
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/yandex/pogoda-home-assistant.git
+          git fetch upstream main
+          git merge --no-edit upstream/main
+          git push origin main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install test requirements
+        run: pip install -r requirements_test.txt
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Prepare version
+        id: version
+        shell: bash
+        run: |
+          BASE_VERSION=$(python -c 'import json; print(json.load(open("custom_components/yandex_pogoda/manifest.json", encoding="utf-8"))["version"])')
+          UPSTREAM_DATE=$(git show -s --format=%cd --date=format:%Y%m%d upstream/main)
+          SAFE_VERSION="${BASE_VERSION}.${UPSTREAM_DATE}"
+          echo "safe_version=${SAFE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${SAFE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this upstream revision is already released
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build HACS ZIP
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          SAFE_VERSION: ${{ steps.version.outputs.safe_version }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest = Path("custom_components/yandex_pogoda/manifest.json")
+          data = json.loads(manifest.read_text(encoding="utf-8"))
+          data["version"] = os.environ["SAFE_VERSION"]
+          manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+          cd custom_components/yandex_pogoda
+          zip -r ../../../yandex_pogoda.zip .
+
+      - name: Publish tested release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          gh release create "$TAG" yandex_pogoda.zip \
+            --title "$TAG" \
+            --notes "Автоматически синхронизировано с yandex/pogoda-home-assistant, тесты пройдены."
